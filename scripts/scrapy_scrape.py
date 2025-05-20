@@ -21,7 +21,6 @@ class PoetrySpider(scrapy.Spider):
     }
 
     def parse(self, response):
-        # Iterate over author directory links: href starts and ends with '/'
         for author_sel in response.css("a[href^='/' ][href$='/']"):
             author_name = author_sel.xpath('normalize-space(text())').get()
             href = author_sel.attrib.get('href')
@@ -41,55 +40,50 @@ class PoetrySpider(scrapy.Spider):
 
     def parse_author(self, response, author_name):
         # Look for sections marked by <div class="titler-section">Section Name</div>
-        for section in response.css('div.titler-section'):
+        for section in response.xpath('//div[contains(@class,"titler-section")]'):
+            # Skip any ‘Вершы’ (or other section) that follows a titler-lang block
+            container = section.xpath('ancestor::div[contains(@class,"container")][1]')
+            if container.xpath('preceding-sibling::div[contains(@class,"titler-lang")]'):
+                continue
+
             section_title = section.xpath('normalize-space(text())').get()
             if section_title in TARGET_SECTIONS:
                 self.logger.info(f"  Found section '{section_title}' for {author_name}")
                 # The poem links are typically in the next <ul> after this div
                 ul = section.xpath('following-sibling::*[1][self::ul]')
                 for li in ul.xpath('.//li'):
-                    # Within each <li>, skip epub links and find the .html link
+                    # Within each <li>, skip html links and find the .epub link
                     for link in li.xpath('.//a'):
                         href = link.attrib.get('href', '')
-                        if href.endswith('.html'):
+                        if href.endswith('.epub'):
                             poem_title = link.xpath('normalize-space(text())').get()
-                            poem_url = response.urljoin(href)
+                            poem_epub_url = response.urljoin(href)
                             yield scrapy.Request(
-                                url=poem_url,
-                                callback=self.parse_poem,
+                                url=poem_epub_url,
+                                callback=self.parse_epub_poem,
                                 cb_kwargs={
+                                    'epub_url': poem_epub_url,
                                     'author_name': author_name,
                                     'poem_title': poem_title,
+                                    'section': section_title,
                                 }
                             )
-
-    def parse_poem(self, response, author_name, poem_title):
-        # Determine poem title from page: second <h2> without <a>
-        page_title = response.xpath("//h2[not(a)][1]/text()").get()
-        title = page_title.strip() if page_title else poem_title
-
-        # Extract poem body between BOOK_BEGIN and BOOK_END comments
-        body = response.text
-        match = re.search(r"<!--\s*BOOK_BEGIN\s*-->(.*?)<!--\s*BOOK_END\s*-->", body, re.S)
-        if match:
-            raw_html = match.group(1)
-            sel = Selector(text=raw_html)
-            paragraphs = sel.xpath('//p/text()').getall()
-            lines = [p.strip() for p in paragraphs if p.strip() and p.strip() != '\xa0']
-            poem_text = '\n'.join(lines)
-        else:
-            poem_text = response.xpath("string(//div[@id='content'] | //body)").get().strip()
-
-        # Save to file
-        author_dir = os.path.join(OUTPUT_DIR, author_name)
+    
+    def parse_epub_poem(self, response, epub_url, author_name, poem_title, section):
+        # Extract filename from URL
+        filename = epub_url.rsplit('/', 1)[-1]
+        # Build output directory: poems/<AuthorName>/epubs/
+        author_dir = os.path.join(OUTPUT_DIR, author_name, section)
         os.makedirs(author_dir, exist_ok=True)
-        slug = os.path.basename(response.url).rstrip('.html')
-        filename = f"{slug}.txt"
         file_path = os.path.join(author_dir, filename)
 
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(poem_text)
-        self.logger.info(f"    Saved poem '{title}' to {file_path}")
+        # Write out the binary .epub content
+        with open(file_path, 'wb') as f:
+            f.write(response.body)
+
+        self.logger.info(f"    Downloaded EPUB “{poem_title}” to {file_path}")
+
+
 
 if __name__ == '__main__':
     os.makedirs(OUTPUT_DIR, exist_ok=True)
