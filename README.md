@@ -1,10 +1,10 @@
-# [WIP] Dataset of Belarussian poetry
+# [WIP] Dataset of Belarusian poetry
 
-Scraping of belarussian poetry from knihi.com (БЕЛАРУСКАЯ ПАЛІЧКА)
+Scraping of belarusian poetry from knihi.com (БЕЛАРУСКАЯ ПАЛІЧКА)
 
 ## Collection process 
 
-### Phase 1: Belarussian authors poetry
+### Phase 1: Belarusian authors poetry
 1) Go https://knihi.com/autary.html
 
 2) Visit page of every author and parse categories with links to works 
@@ -13,4 +13,4 @@ Scraping of belarussian poetry from knihi.com (БЕЛАРУСКАЯ ПАЛІЧК
     - skip categories starting with [Творы ў перакладзе на ...]
 4) parse collected epub files
 
-### TODO: Phase 2: phase 1 + poetry translation into belarussian 
+### TODO: Phase 2: phase 1 + poetry translation into belarusian 
